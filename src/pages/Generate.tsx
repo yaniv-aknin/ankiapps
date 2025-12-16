@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import type { QuizSettings } from '../lib/types';
 import { DEFAULT_SETTINGS, DEFAULT_PROMPTS } from '../lib/types';
 import { QuizService } from '../lib/quiz-service';
 import { loadVocabulary, addNote, updateNote } from '../lib/anki';
 import { Sparkles, Save, Trash2, Check, AlertCircle } from 'lucide-react';
+import { getAnkiConnectionError, getApiKeyError, getAnkiUrlError, isAnkiConnectionError } from '../lib/error-messages';
 
 interface GeneratedCard {
     id: string;
@@ -24,7 +25,7 @@ export default function Generate() {
     const [settings, setSettings] = useState<QuizSettings>(DEFAULT_SETTINGS);
     const [generatedCards, setGeneratedCards] = useState<GeneratedCard[]>([]);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ReactNode | null>(null);
 
     useEffect(() => {
         const saved = localStorage.getItem('quizSettings');
@@ -51,9 +52,30 @@ export default function Generate() {
         }
     }, []);
 
+    // Check connectivity on mount
+    useEffect(() => {
+        const checkConnectivity = async () => {
+            setError(null);
+
+            if (!settings.anthropicApiKey) {
+                setError(getApiKeyError());
+                return;
+            }
+
+            try {
+                const { invokeAnkiConnect } = await import('../lib/anki');
+                await invokeAnkiConnect('version', {}, settings.ankiConnectUrl);
+            } catch {
+                setError(getAnkiConnectionError());
+            }
+        };
+
+        checkConnectivity();
+    }, [settings.anthropicApiKey, settings.ankiConnectUrl]);
+
     const handleGenerate = async () => {
         if (!settings.anthropicApiKey) {
-            setError('Please set your Anthropic API Key in Settings.');
+            setError(getApiKeyError());
             return;
         }
 
@@ -77,7 +99,12 @@ export default function Generate() {
             }));
             setGeneratedCards(newCards);
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Error generating cards');
+            const errorMsg = e instanceof Error ? e.message : 'Error generating cards';
+            if (isAnkiConnectionError(errorMsg)) {
+                setError(getAnkiConnectionError());
+            } else {
+                setError(errorMsg);
+            }
         } finally {
             setLoading(false);
         }
@@ -87,7 +114,7 @@ export default function Generate() {
         const card = generatedCards[index];
         if (card.saving) return;
         if (!settings.ankiConnectUrl) {
-            setError('AnkiConnect URL not set');
+            setError(getAnkiUrlError());
             return;
         }
 
@@ -124,7 +151,12 @@ export default function Generate() {
                 updatedCards[index].saved = true;
             }
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Error saving card');
+            const errorMsg = e instanceof Error ? e.message : 'Error saving card';
+            if (isAnkiConnectionError(errorMsg)) {
+                setError(getAnkiConnectionError());
+            } else {
+                setError(errorMsg);
+            }
             updatedCards[index].saved = false;
         } finally {
             updatedCards[index].saving = false;

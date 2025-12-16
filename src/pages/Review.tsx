@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import type { ReviewNote, ReviewMode, QuizSettings } from '../lib/types';
 import { DEFAULT_SETTINGS, DEFAULT_PROMPTS, getTextDirection } from '../lib/types';
 import { getReviewNotes, updateNote } from '../lib/anki';
 import { Settings as SettingsIcon } from 'lucide-react';
+import { getAnkiConnectionError, isAnkiConnectionError } from '../lib/error-messages';
 
 type FontSize = '11pt' | '14pt' | '18pt';
 
@@ -174,7 +175,7 @@ export default function Review() {
     const [settings, setSettings] = useState<QuizSettings>(DEFAULT_SETTINGS);
     const [notes, setNotes] = useState<ReviewNote[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ReactNode | null>(null);
 
     const [frontMode, setFrontMode] = useState<ReviewMode>('saveable');
     const [backMode, setBackMode] = useState<ReviewMode>('saveable');
@@ -205,6 +206,22 @@ export default function Review() {
         }
     }, []);
 
+    // Check connectivity on mount
+    useEffect(() => {
+        const checkConnectivity = async () => {
+            setError(null);
+
+            try {
+                const { invokeAnkiConnect } = await import('../lib/anki');
+                await invokeAnkiConnect('version', {}, settings.ankiConnectUrl);
+            } catch {
+                setError(getAnkiConnectionError());
+            }
+        };
+
+        checkConnectivity();
+    }, [settings.ankiConnectUrl]);
+
     useEffect(() => {
         const fetchNotes = async () => {
             if (!settings.ankiConnectUrl) return;
@@ -215,7 +232,12 @@ export default function Review() {
                 const data = await getReviewNotes(settings.maxWords, settings.deckFilter, settings.ankiConnectUrl);
                 setNotes(data);
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to load notes');
+                const errorMsg = err instanceof Error ? err.message : 'Failed to load notes';
+                if (isAnkiConnectionError(errorMsg)) {
+                    setError(getAnkiConnectionError());
+                } else {
+                    setError(errorMsg);
+                }
             } finally {
                 setLoading(false);
             }

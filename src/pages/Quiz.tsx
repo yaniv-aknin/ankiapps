@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { VocabItem, QuizSettings } from '../lib/types';
 import { DEFAULT_SETTINGS, getTextDirection } from '../lib/types';
 import { loadVocabulary } from '../lib/anki';
 import { QuizService } from '../lib/quiz-service';
 import { AlertCircle, RefreshCw, Send, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { getAnkiConnectionError, getApiKeyError, isAnkiConnectionError } from '../lib/error-messages';
 
 export default function Home() {
     const [settings, setSettings] = useState<QuizSettings>(DEFAULT_SETTINGS);
@@ -16,7 +17,7 @@ export default function Home() {
     const [feedback, setFeedback] = useState<string | null>(null);
     const [result, setResult] = useState<'PASS' | 'FAIL' | null>(null);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ReactNode | null>(null);
 
     // Load settings on mount
     useEffect(() => {
@@ -43,6 +44,27 @@ export default function Home() {
         }
     }, []);
 
+    // Check connectivity on mount
+    useEffect(() => {
+        const checkConnectivity = async () => {
+            setError(null);
+
+            if (!settings.anthropicApiKey) {
+                setError(getApiKeyError());
+                return;
+            }
+
+            try {
+                const { invokeAnkiConnect } = await import('../lib/anki');
+                await invokeAnkiConnect('version', {}, settings.ankiConnectUrl);
+            } catch {
+                setError(getAnkiConnectionError());
+            }
+        };
+
+        checkConnectivity();
+    }, [settings.anthropicApiKey, settings.ankiConnectUrl]);
+
     const handleLoadVocabulary = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -56,7 +78,12 @@ export default function Home() {
             setVocabulary(vocab);
             return vocab;
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load vocabulary');
+            const errorMsg = err instanceof Error ? err.message : 'Failed to load vocabulary';
+            if (isAnkiConnectionError(errorMsg)) {
+                setError(getAnkiConnectionError());
+            } else {
+                setError(errorMsg);
+            }
             return null;
         } finally {
             setLoading(false);
@@ -65,7 +92,7 @@ export default function Home() {
 
     const generateQuestion = useCallback(async () => {
         if (!settings.anthropicApiKey) {
-            setError('Please set your Anthropic API Key in Settings.');
+            setError(getApiKeyError());
             return;
         }
 
@@ -101,7 +128,7 @@ export default function Home() {
             return;
         }
         if (!settings.anthropicApiKey) {
-            setError('Please set your Anthropic API Key in Settings.');
+            setError(getApiKeyError());
             return;
         }
 
@@ -152,8 +179,8 @@ export default function Home() {
                 <AlertCircle className="w-16 h-16 text-yellow-500 mb-4" />
                 <h2 className="text-2xl font-bold text-gray-800 mb-2">Setup Required</h2>
                 <p className="text-gray-600 mb-6">You need to configure your Anthropic API Key to start the quiz.</p>
-                <Link to="/settings" className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium">
-                    Go to Settings
+                <Link to="/" className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium">
+                    Complete Setup
                 </Link>
             </div>
         )
