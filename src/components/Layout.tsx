@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Sparkles, BookOpen, Settings, Home, ListTodo } from 'lucide-react';
+import { Sparkles, BookOpen, Settings, Home, ListTodo, Github } from 'lucide-react';
 import clsx from 'clsx';
 
 interface LayoutProps {
@@ -29,7 +29,7 @@ export default function Layout({ children }: LayoutProps) {
                                 </span>
                             </div>
                         </div>
-                        <div className="hidden sm:flex sm:space-x-8">
+                        <div className="hidden sm:flex sm:items-center sm:space-x-8">
                             {links.map((link) => (
                                 <NavLink
                                     key={link.to}
@@ -47,6 +47,15 @@ export default function Layout({ children }: LayoutProps) {
                                     {link.label}
                                 </NavLink>
                             ))}
+                            <a
+                                href="https://github.com/yaniv-aknin/ankiapps"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center text-gray-500 hover:text-gray-900 transition-colors duration-200"
+                                title="Fork me on GitHub"
+                            >
+                                <Github className="w-6 h-6" />
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -68,6 +77,15 @@ export default function Layout({ children }: LayoutProps) {
                             {link.label}
                         </NavLink>
                     ))}
+                    <a
+                        href="https://github.com/yaniv-aknin/ankiapps"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center p-2 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                    >
+                        <Github className="w-6 h-6 mb-1" />
+                        GitHub
+                    </a>
                 </div>
             </nav>
 
