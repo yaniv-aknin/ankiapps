@@ -2,7 +2,7 @@ import { useState, useEffect, type ReactNode } from 'react';
 import type { QuizSettings } from '../lib/types';
 import { DEFAULT_SETTINGS, DEFAULT_PROMPTS } from '../lib/types';
 import { QuizService } from '../lib/quiz-service';
-import { loadVocabulary, addNote, updateNote } from '../lib/anki';
+import { loadVocabulary, addNote, updateNote, deleteNote } from '../lib/anki';
 import { Sparkles, Save, Trash2, Check, AlertCircle } from 'lucide-react';
 import { getAnkiConnectionError, getApiKeyError, getAnkiUrlError, isAnkiConnectionError } from '../lib/error-messages';
 
@@ -26,6 +26,9 @@ export default function Generate() {
     const [generatedCards, setGeneratedCards] = useState<GeneratedCard[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<ReactNode | null>(null);
+    const [availableNoteTypes, setAvailableNoteTypes] = useState<string[]>([]);
+    const [selectedNoteType, setSelectedNoteType] = useState('Basic (and reversed card)');
+    const [addGeneratedTag, setAddGeneratedTag] = useState(true);
 
     useEffect(() => {
         const saved = localStorage.getItem('quizSettings');
@@ -72,6 +75,39 @@ export default function Generate() {
 
         checkConnectivity();
     }, [settings.anthropicApiKey, settings.ankiConnectUrl]);
+
+    // Fetch available note types
+    useEffect(() => {
+        const fetchNoteTypes = async () => {
+            try {
+                const { invokeAnkiConnect } = await import('../lib/anki');
+                const modelNames = await invokeAnkiConnect('modelNames', {}, settings.ankiConnectUrl);
+
+                const recommendedTypes = [
+                    'Basic',
+                    'Basic (and reversed card)',
+                    'Basic (optional reversed card)',
+                    'Basic (type in the answer)'
+                ];
+
+                const filteredTypes = modelNames.filter((name: string) => {
+                    return recommendedTypes.some(recommended => name === recommended);
+                });
+
+                setAvailableNoteTypes(filteredTypes.length > 0 ? filteredTypes : modelNames);
+
+                if (filteredTypes.includes('Basic (and reversed card)')) {
+                    setSelectedNoteType('Basic (and reversed card)');
+                } else if (filteredTypes.length > 0) {
+                    setSelectedNoteType(filteredTypes[0]);
+                }
+            } catch {
+                // Silently fail and keep default note types
+            }
+        };
+
+        fetchNoteTypes();
+    }, [settings.ankiConnectUrl]);
 
     const handleGenerate = async () => {
         if (!settings.anthropicApiKey) {
@@ -138,12 +174,14 @@ export default function Generate() {
                 updatedCards[index].saved = true;
             } else {
                 // Add new note
+                const tags = addGeneratedTag ? ['ankiapps-generated'] : [];
                 const { result, fieldNames } = await addNote(
                     card.front,
                     card.back,
                     settings.deckFilter || 'Default',
-                    'Basic',
-                    settings.ankiConnectUrl
+                    selectedNoteType,
+                    settings.ankiConnectUrl,
+                    tags
                 );
 
                 updatedCards[index].noteId = result;
@@ -171,7 +209,28 @@ export default function Generate() {
         setGeneratedCards(updatedCards);
     };
 
-    const handleDeleteCard = (index: number) => {
+    const handleDeleteCard = async (index: number) => {
+        const card = generatedCards[index];
+
+        if (card.noteId) {
+            if (!settings.ankiConnectUrl) {
+                setError(getAnkiUrlError());
+                return;
+            }
+
+            try {
+                await deleteNote(card.noteId, settings.ankiConnectUrl);
+            } catch (e) {
+                const errorMsg = e instanceof Error ? e.message : 'Error deleting card';
+                if (isAnkiConnectionError(errorMsg)) {
+                    setError(getAnkiConnectionError());
+                } else {
+                    setError(errorMsg);
+                }
+                return;
+            }
+        }
+
         const updatedCards = [...generatedCards];
         updatedCards.splice(index, 1);
         setGeneratedCards(updatedCards);
@@ -226,17 +285,41 @@ export default function Generate() {
                             </select>
                         </div>
 
-                        <div className="flex items-center pt-8">
-                            <label className="flex items-center cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={shareCards}
-                                    onChange={(e) => setShareCards(e.target.checked)}
-                                    className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition"
-                                />
-                                <span className="ml-3 text-sm font-medium text-gray-700">Use existing cards as context</span>
-                            </label>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Note Type</label>
+                            <select
+                                value={selectedNoteType}
+                                onChange={(e) => setSelectedNoteType(e.target.value)}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white shadow-sm"
+                            >
+                                {availableNoteTypes.map((noteType) => (
+                                    <option key={noteType} value={noteType}>
+                                        {noteType}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <label className="flex items-center cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={shareCards}
+                                onChange={(e) => setShareCards(e.target.checked)}
+                                className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition"
+                            />
+                            <span className="ml-3 text-sm font-medium text-gray-700">Use existing cards as context</span>
+                        </label>
+                        <label className="flex items-center cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={addGeneratedTag}
+                                onChange={(e) => setAddGeneratedTag(e.target.checked)}
+                                className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition"
+                            />
+                            <span className="ml-3 text-sm font-medium text-gray-700">Add "ankiapps-generated" tag</span>
+                        </label>
                     </div>
 
                     <button
@@ -287,12 +370,19 @@ export default function Generate() {
                                 {generatedCards.map((card, index) => (
                                     <tr key={card.id} className="hover:bg-gray-50 transition-colors group">
                                         <td className="px-4 py-3">
-                                            <input
-                                                type="text"
-                                                value={card.front}
-                                                onChange={(e) => updateCardContent(index, 'front', e.target.value)}
-                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-transparent transition-all"
-                                            />
+                                            <div className="flex items-center gap-2">
+                                                {card.noteId && (
+                                                    <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center" title="Saved to Anki">
+                                                        <Check className="w-3 h-3 text-green-600" />
+                                                    </div>
+                                                )}
+                                                <input
+                                                    type="text"
+                                                    value={card.front}
+                                                    onChange={(e) => updateCardContent(index, 'front', e.target.value)}
+                                                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-transparent transition-all"
+                                                />
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3">
                                             <input

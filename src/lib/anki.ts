@@ -252,17 +252,9 @@ export async function addNote(
   back: string,
   deckName: string,
   modelName: string,
-  url: string
+  url: string,
+  tags?: string[]
 ): Promise<{ result: number; fieldNames: string[] }> {
-  // We assume field names are 'Front' and 'Back' for default models, or we should get model fields first?
-  // The previous implementation blindly sent 'Front' and 'Back' in fallback, BUT actually the API call in previous code was:
-  // `body: JSON.stringify({ front, back, deckName, modelName })` to /api/anki/add-note
-  // Let's see what /api/anki/add-note did.
-
-  // Check /api/anki/add-note implementation if possible.
-  // For now, I'll assume standard 'Basic' model uses 'Front' and 'Back'.
-
-  // Actually, let's fetch model field names to be robust.
   const fields = await invokeAnkiConnect("modelFieldNames", { modelName }, url);
   if (!fields || fields.length < 2) {
     throw new Error(`Model ${modelName} does not have enough fields`);
@@ -275,7 +267,7 @@ export async function addNote(
       [fields[0]]: front,
       [fields[1]]: back,
     },
-    tags: ["ankiapps-generated"],
+    tags: tags || [],
   };
 
   const result = await invokeAnkiConnect("addNote", { note }, url);
@@ -292,4 +284,11 @@ export async function updateNote(
     fields,
   };
   return await invokeAnkiConnect("updateNoteFields", { note }, url);
+}
+
+export async function deleteNote(
+  noteId: number,
+  url: string
+) {
+  return await invokeAnkiConnect("deleteNotes", { notes: [noteId] }, url);
 }
