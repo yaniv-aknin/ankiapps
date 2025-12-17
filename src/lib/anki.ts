@@ -186,13 +186,13 @@ export async function getReviewNotes(
     for (const stat of statsList) {
       const interval = Number(stat.interval);
       const factor = Number(stat.factor);
-      const reviews = Number(stat.reviews);
+      const reps = Number(stat.reps);
       const lapses = Number(stat.lapses);
 
       if (!isNaN(interval) && interval < minInterval) minInterval = interval;
       if (!isNaN(factor) && factor < minFactor) minFactor = factor;
       if (!isNaN(lapses) && lapses > maxLapses) maxLapses = lapses;
-      if (!isNaN(reviews)) sumReviews += reviews;
+      if (!isNaN(reps)) sumReviews += reps;
     }
 
     let grade = "N";
@@ -229,7 +229,7 @@ export async function getReviewNotes(
         (s) =>
           `Card ${s.cardId}:\n- Interval: ${s.interval}d\n- Ease Factor: ${
             s.factor / 10
-          }%\n- Reviews: ${s.reviews}\n- Lapses: ${s.lapses}`
+          }%\n- Reviews: ${s.reps}\n- Lapses: ${s.lapses}`
       )
       .join("\n\n");
 

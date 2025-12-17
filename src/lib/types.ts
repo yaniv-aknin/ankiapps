@@ -40,7 +40,7 @@ export interface AnkiCardStats {
   cardId: number;
   interval: number;
   factor: number;
-  reviews: number;
+  reps: number;
   lapses: number;
   type: number; // 0=new, 1=learning, 2=review, 3=relearning
   queue: number;
